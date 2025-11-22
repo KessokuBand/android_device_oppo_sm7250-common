@@ -128,6 +128,7 @@ PRODUCT_PACKAGES += \
     gralloc.lito \
     libdisplayconfig.qti \
     libdisplayconfig.system.qti \
+    libhistogram \
     libqdMetaData \
     libqdMetaData.system \
     libqdutils \
