@@ -840,7 +840,6 @@ function configure_zram_parameters() {
     if [ "$low_ram" == "true" ]; then
         echo lz4 > /sys/block/zram0/comp_algorithm
     fi
-
     if [ -f /sys/block/zram0/disksize ]; then
         if [ -f /sys/block/zram0/use_dedup ]; then
             echo 1 > /sys/block/zram0/use_dedup
@@ -861,6 +860,208 @@ function configure_zram_parameters() {
     fi
 }
 
+#ifdef VENDOR_EDIT
+#/*Huacai.Zhou@Tech.Kernel.MM, add zram opt*/
+function oplus_configure_zram_parameters() {
+    MemTotalStr=`cat /proc/meminfo | grep MemTotal`
+    MemTotal=${MemTotalStr:16:8}
+
+    echo lz4 > /sys/block/zram0/comp_algorithm
+    echo 160 > /proc/sys/vm/swappiness
+    echo 60 > /proc/sys/vm/direct_swappiness
+    echo 0 > /proc/sys/vm/page-cluster
+
+    if [ -f /sys/block/zram0/disksize ]; then
+        if [ -f /sys/block/zram0/use_dedup ]; then
+            echo 1 > /sys/block/zram0/use_dedup
+        fi
+
+        if [ $MemTotal -le 524288 ]; then
+            #config 384MB zramsize with ramsize 512MB
+            echo 402653184 > /sys/block/zram0/disksize
+        elif [ $MemTotal -le 1048576 ]; then
+            #config 768MB zramsize with ramsize 1GB
+            echo 805306368 > /sys/block/zram0/disksize
+        elif [ $MemTotal -le 2097152 ]; then
+            #config 1GB+256MB zramsize with ramsize 2GB
+            echo lz4 > /sys/block/zram0/comp_algorithm
+            echo 1342177280 > /sys/block/zram0/disksize
+        elif [ $MemTotal -le 3145728 ]; then
+            #config 1GB+512MB zramsize with ramsize 3GB
+            echo 1610612736 > /sys/block/zram0/disksize
+        elif [ $MemTotal -le 4194304 ]; then
+            #config 2GB+512MB zramsize with ramsize 4GB
+            echo 2684354560 > /sys/block/zram0/disksize
+        elif [ $MemTotal -le 6291456 ]; then
+            #config 3GB zramsize with ramsize 6GB
+            echo 3221225472 > /sys/block/zram0/disksize
+        else
+            #config 4GB zramsize with ramsize >=8GB
+            if [ "$target" == "lito" ]; then
+                echo zstd > /sys/block/zram0/comp_algorithm
+                echo 5368709120 > /sys/block/zram0/disksize
+                echo 200 > /proc/sys/vm/swappiness
+                echo 0 > /proc/sys/vm/direct_swappiness
+            else
+                echo 4294967296 > /sys/block/zram0/disksize
+            fi
+        fi
+        mkswap /dev/block/zram0
+        swapon /dev/block/zram0 -p 32758
+    fi
+}
+#/*Add swappiness tunning parameters*/
+function oplus_configure_tunning_swappiness() {
+    MemTotalStr=`cat /proc/meminfo | grep MemTotal`
+    MemTotal=${MemTotalStr:16:8}
+
+    if [ $MemTotal -le 6291456 ]; then
+        echo 0 > /proc/sys/vm/vm_swappiness_threshold1
+        echo 0 > /proc/sys/vm/swappiness_threshold1_size
+        echo 0 > /proc/sys/vm/vm_swappiness_threshold2
+        echo 0 > /proc/sys/vm/swappiness_threshold2_size
+    elif [ $MemTotal -le 8388608 ]; then
+        echo 100 > /proc/sys/vm/vm_swappiness_threshold1
+        echo 2000 > /proc/sys/vm/swappiness_threshold1_size
+        echo 120 > /proc/sys/vm/vm_swappiness_threshold2
+        echo 1500 > /proc/sys/vm/swappiness_threshold2_size
+    fi
+}
+
+function oplus_configure_hybridswap() {
+	kernel_version=`uname -r`
+
+	if [[ "$kernel_version" == "5.10"* ]]; then
+		echo 160 > /sys/module/oplus_bsp_zram_opt/parameters/vm_swappiness
+	else
+		echo 160 > /sys/module/zram_opt/parameters/vm_swappiness
+	fi
+
+	echo 160 > /proc/sys/vm/swappiness
+	echo 0 > /proc/sys/vm/page-cluster
+
+	# FIXME: set system memcg pata in init.kernel.post_boot-lahaina.sh temporary
+	echo 500 > /dev/memcg/system/memory.app_score
+	echo systemserver > /dev/memcg/system/memory.name
+}
+#endif /*VENDOR_EDIT*/
+
+#ifdef OPLUS_FEATURE_ZRAM_WRITEBACK
+#Huangwen.Chen@OPTIMIZATION, 2021/01/11, Add for zram writeback
+function configure_zram_writeback() {
+    # get backing storage size, unit: MB
+    backing_dev_size=$(getprop persist.vendor.zwriteback.backing_dev_size 2048)
+    case $backing_dev_size in
+        [1-9])
+            ;;
+        [1-9][0-9]*)
+            ;;
+        *)
+            backing_dev_size=2048
+            ;;
+    esac
+
+    # back up backing_dev file
+    dump_switch=$(getprop persist.sys.dump)
+    wb_file="/data/vendor/swap/zram_wb"
+    if [[ -f $wb_file && $dump_switch == 1 ]];then
+        rm -f "/data/vendor/swap/zram_wb.old"
+        mv $wb_file "/data/vendor/swap/zram_wb.old"
+    fi
+    # create backing storage
+    # check if dd command success
+    ret=$(dd if=/dev/zero of=/data/vendor/swap/zram_wb bs=1m count=$backing_dev_size 2>&1)
+    if [ $? -ne 0 ];then
+        rm -f /data/vendor/swap/zram_wb
+        echo "zwb $ret" > /dev/kmsg
+        return 1
+    fi
+
+    # check if attaching file success
+    losetup -f
+    loop_device=$(losetup -f -s /data/vendor/swap/zram_wb 2>&1)
+    if [ $? -ne 0 ];then
+        rm -f /data/vendor/swap/zram_wb
+        echo "zwb $loop_device" > /dev/kmsg
+        return 1
+    fi
+    echo $loop_device > /sys/block/zram0/backing_dev
+
+    mem_limit=$(getprop persist.vendor.zwriteback.mem_limit)
+    case $mem_limit in
+        [1-9])
+            mem_limit="${mem_limit}M"
+            ;;
+        [1-9][0-9]*)
+            mem_limit="${mem_limit}M"
+            ;;
+        *)
+            mem_limit="1G"
+            ;;
+    esac
+    echo $mem_limit > /sys/block/zram0/mem_limit
+}
+
+function configure_zwb_parameters() {
+    setprop vendor.sys.zwriteback.postboot 1
+    zwb_switch=`getprop persist.vendor.zwriteback.enable 1`
+    case "$zwb_switch" in
+        "1")
+            # enable zram writeback
+            oppo_zram_disksize=$(cat /sys/block/zram0/disksize)
+            rm /data/vendor/swap/swapfile
+            # reset zram swapspace
+            echo "zwb swapoff start" > /dev/kmsg
+            ret=$(swapoff /dev/block/zram0 2>&1)
+            if [ $? -ne 0 ];then
+                echo "zwb $ret" > /dev/kmsg
+                return
+            fi
+            echo "zwb swapoff done" > /dev/kmsg
+            echo 1 > /sys/block/zram0/reset
+
+            disksize=$(getprop persist.vendor.zwriteback.disksize 4096)
+            case $disksize in
+                [1-9])
+                    disksize="${disksize}M"
+                    ;;
+                [1-9][0-9]*)
+                    disksize="${disksize}M"
+                    ;;
+                *)
+                    disksize="${oppo_zram_disksize}"
+                    ;;
+            esac
+
+            # check if ZRAM_WRITEBACK_CONFIG enable
+            writeback_file="/sys/block/zram0/writeback"
+            if [[ -f $writeback_file ]];then
+                configure_zram_writeback
+                # check if configure_zram_writeback success
+                if [ $? -ne 0 ];then
+                    disksize=$oppo_zram_disksize
+                    echo 0 > /sys/block/zram0/mem_limit
+                fi
+            else
+                rm -f /data/vendor/swap/zram_wb
+                disksize=$oppo_zram_disksize
+                echo 0 > /sys/block/zram0/mem_limit
+            fi
+            echo $disksize > /sys/block/zram0/disksize
+
+            mkswap /dev/block/zram0
+            echo "zwb swapon start" > /dev/kmsg
+            swapon /dev/block/zram0 -p 32758
+            echo "zwb swapon done" > /dev/kmsg
+            ;;
+        *)
+            # disable zram writeback
+            ;;
+    esac
+    setprop vendor.sys.zwriteback.postboot 2
+}
+#endif /* OPLUS_FEATURE_ZRAM_WRITEBACK */
+
 function configure_read_ahead_kb_values() {
     MemTotalStr=`cat /proc/meminfo | grep MemTotal`
     MemTotal=${MemTotalStr:16:8}
@@ -879,7 +1080,17 @@ function configure_read_ahead_kb_values() {
         echo 512 > /sys/block/mmcblk0/bdi/read_ahead_kb
         echo 512 > /sys/block/mmcblk0rpmb/bdi/read_ahead_kb
         for dm in $dmpts; do
-            echo 512 > $dm
+            dm_dev=`echo $dm |cut -d/ -f4`
+            if [ "$dm_dev" = "" ]; then
+                is_erofs=""
+            else
+                is_erofs=`mount |grep erofs |grep "${dm_dev} "`
+            fi
+            if [ "$is_erofs" = "" ]; then
+                echo 512 > $dm
+            else
+                echo 128 > $dm
+            fi
         done
     fi
 }
@@ -940,16 +1151,46 @@ function configure_memory_parameters() {
     #
     # Set allocstall_threshold to 0 for all targets.
     #
+    MemTotalStr=`cat /proc/meminfo | grep MemTotal`
+    MemTotal=${MemTotalStr:16:8}
 
 ProductName=`getprop ro.product.name`
 low_ram=`getprop ro.config.low_ram`
 
 if [ "$ProductName" == "msmnile" ] || [ "$ProductName" == "kona" ] || [ "$ProductName" == "sdmshrike_au" ]; then
       # Enable ZRAM
-      configure_zram_parameters
+#ifdef VENDOR_EDIT
+#/*Huacai.Zhou@Tech.Kernel.MM, add zram opt*/
+    # For vts test which has replace system.img
+    ls -ld /product | grep '\-\>'
+    if [ $? -eq 0 ]; then
+        oplus_configure_zram_parameters
+    else
+        if [ -f /sys/block/zram0/hybridswap_enable ]; then
+            oplus_configure_hybridswap
+        else
+            oplus_configure_zram_parameters
+        fi
+    fi
+    oplus_configure_tunning_swappiness
+#else
+#      configure_zram_parameters
+#endif /*VENDOR_EDIT*/
+
+#ifdef OPLUS_FEATURE_ZRAM_WRITEBACK
+#Huangwen.Chen@OPTIMIZATION, 2021/01/11, Add for zram writeback
+#    postboot_running=$(getprop vendor.sys.zwriteback.postboot 0)
+#    if [ $postboot_running != 3 ];then
+#        configure_zwb_parameters
+#    fi
+#endif /* OPLUS_FEATURE_ZRAM_WRITEBACK */
+
       configure_read_ahead_kb_values
       echo 0 > /proc/sys/vm/page-cluster
-      echo 100 > /proc/sys/vm/swappiness
+#ifndef VENDOR_EDIT
+#/*Huacai.Zhou@Tech.Kernel.MM, add zram opt*/
+#      echo 100 > /proc/sys/vm/swappiness
+#endif /*VENDOR_EDIT*/
 else
     arch_type=`uname -m`
 
@@ -1058,9 +1299,47 @@ else
 
     # Disable wsf for all targets beacause we are using efk.
     # wsf Range : 1..1000 So set to bare minimum value 1.
-    echo 1 > /proc/sys/vm/watermark_scale_factor
+    #echo 1 > /proc/sys/vm/watermark_scale_factor
 
-    configure_zram_parameters
+#ifdef VENDOR_EDIT
+#/*Huacai.Zhou@Tech.Kernel.MM, add zram opt*/
+    # For vts test which has replace system.img
+    ls -ld /product | grep '\-\>'
+    if [ $? -eq 0 ]; then
+        oplus_configure_zram_parameters
+    else
+        if [ -f /sys/block/zram0/hybridswap_enable ]; then
+            oplus_configure_hybridswap
+        else
+            oplus_configure_zram_parameters
+        fi
+    fi
+	oplus_configure_tunning_swappiness
+#else
+    #configure_zram_parameters
+#endif /*VENDOR_EDIT*/
+
+#ifdef OPLUS_ANDROID_PERFORMANCE
+#/*Kejun.Xu@Tech.Performance, disable boost water mark and enlarger gap between low and high*/
+    if [ $MemTotal -le 6291456 ]; then
+        echo 40 > /proc/sys/vm/watermark_scale_factor
+        echo 0 > /proc/sys/vm/watermark_boost_factor
+    fi
+#endif /*OPLUS_ANDROID_PERFORMANCE*/
+
+#/*vishal.kumar.jha.Performance, tuning specific for oneplus nord*/
+    if [[ "$ProductName" == "Nord_IND"* ]]; then
+       echo 100 > /proc/sys/vm/swappiness
+       echo 1 > /proc/sys/vm/watermark_scale_factor
+       echo 15000 > /proc/sys/vm/watermark_boost_factor
+    fi
+#ifdef OPLUS_FEATURE_ZRAM_WRITEBACK
+#Huangwen.Chen@OPTIMIZATION, 2021/01/11, Add for zram writeback
+#    postboot_running=$(getprop vendor.sys.zwriteback.postboot 0)
+#    if [ $postboot_running != 3 ];then
+#        configure_zwb_parameters
+#    fi
+#endif /* OPLUS_FEATURE_ZRAM_WRITEBACK */
 
     configure_read_ahead_kb_values
 
@@ -1086,11 +1365,14 @@ function enable_memory_features()
 
 function start_hbtp()
 {
-        # Start the Host based Touch processing but not in the power off mode.
-        bootmode=`getprop ro.bootmode`
-        if [ "charger" != $bootmode ]; then
-                start vendor.hbtp
-        fi
+#ifndef VENDOR_EDIT
+#Qicai.gu@PSW.BSP.TP 2018/03/12 del for closing hbtp
+#        # Start the Host based Touch processing but not in the power off mode.
+#        bootmode=`getprop ro.bootmode`
+#        if [ "charger" != $bootmode ]; then
+#                start vendor.hbtp
+#        fi
+#endif
 }
 
 case "$target" in
@@ -1099,36 +1381,6 @@ case "$target" in
         echo "ondemand" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
         echo 90 > /sys/devices/system/cpu/cpufreq/ondemand/up_threshold
         ;;
-esac
-
-# For Kodiak target for which cdsp is defective, we read remote cdsp status from fastrpc node
-# and if its value is false we disable cdsp daemon by setting the cdsp disable propety to true
-case "$target" in
-	"lahaina")
-		if [ -f /sys/devices/soc0/chip_family ]; then
-			chip_family_id=`cat /sys/devices/soc0/chip_family`
-		else
-			chip_family_id=-1
-		fi
-
-		echo "adsprpc : chip_family_id : $chip_faily_id" > /dev/kmsg
-
-		case "$chip_family_id" in
-			"0x76")
-			if [ -f /sys/devices/platform/soc/soc:qcom,msm_fastrpc/remote_cdsp_status ]; then
-				remote_cdsp_status=`cat /sys/devices/platform/soc/soc:qcom,msm_fastrpc/remote_cdsp_status`
-			else
-				remote_cdsp_status=-1
-			fi
-
-			echo "adsprpc : remote_cdsp_status : $remote_cdsp_status" > /dev/kmsg
-
-			if [ $remote_cdsp_status -eq 0 ]; then
-				setprop vendor.fastrpc.disable.cdsprpcd.daemon 1
-				echo "adsprpc : Disabled cdsp daemon" > /dev/kmsg
-			fi
-		 esac
-		  ;;
 esac
 
 case "$target" in
@@ -3849,6 +4101,20 @@ case "$target" in
         soc_id=`cat /sys/devices/soc0/soc_id`
     fi
 
+    #ifdef OPLUS_FEATURE_POWER_CPUFREQ
+    #window_policy:2=WINDOW_STATS_MAX_RECENT_AVG 3=WINDOW_STATS_AVG
+    echo 2 > /dev/stune/schedtune.window_policy
+    echo 3 > /dev/stune/background/schedtune.window_policy
+    echo 2 > /dev/stune/foreground/schedtune.window_policy
+    echo 2 > /dev/stune/top-app/schedtune.window_policy
+    #endif
+
+	#ifdef OPLUS_FEATURE_POWER_EFFICIENCY
+	echo 1 > /dev/stune/background/schedtune.discount_wait_time
+	echo 1 > /dev/stune/background/schedtune.ed_task_filter
+	echo 1 > /dev/stune/background/schedtune.top_task_filter
+	#endif
+
     case "$soc_id" in
         "400" | "440" | "476" )
         # Core control parameters on silver
@@ -3921,6 +4187,9 @@ case "$target" in
         # Set Memory parameters
         configure_memory_parameters
 
+        #/*Kai Huang@BSP.kernel.Performance change IO scheduler to noop */
+        echo noop > /sys/block/sda/queue/scheduler
+
         if [ `cat /sys/devices/soc0/revision` == "2.0" ]; then
              # r2.0 related changes
              echo "0:1075200" > /sys/devices/system/cpu/cpu_boost/input_boost_freq
@@ -3928,7 +4197,7 @@ case "$target" in
              echo 1075200 > /sys/devices/system/cpu/cpufreq/policy0/schedutil/hispeed_freq
              echo 1152000 > /sys/devices/system/cpu/cpufreq/policy6/schedutil/hispeed_freq
              echo 1401600 > /sys/devices/system/cpu/cpufreq/policy7/schedutil/hispeed_freq
-             echo 614400 > /sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq
+             echo 576000 > /sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq
              echo 652800 > /sys/devices/system/cpu/cpufreq/policy6/scaling_min_freq
              echo 806400 > /sys/devices/system/cpu/cpufreq/policy7/scaling_min_freq
              echo 83 > /proc/sys/kernel/sched_asym_cap_sibling_freq_match_pct
@@ -4006,7 +4275,7 @@ case "$target" in
         setprop vendor.dcvs.prop 1
 
         # cpuset parameters
-        echo 0-5 > /dev/cpuset/background/cpus
+        echo 0-3 > /dev/cpuset/background/cpus
         echo 0-5 > /dev/cpuset/system-background/cpus
 
         # Turn off scheduler boost at the end
@@ -4286,7 +4555,7 @@ case "$target" in
 
         #power/perf tunings for khaje
         case "$soc_id" in
-                 "518" | "561")
+                 "518" )
 
             # Core control parameters on big
             echo 0 > /sys/devices/system/cpu/cpu0/core_ctl/enable
@@ -4377,10 +4646,6 @@ case "$target" in
             # Turn off scheduler boost at the end
             echo 0 > /proc/sys/kernel/sched_boost
 
-	    echo N > /sys/module/lpm_levels/system/pwr/pwr-l2-gdhs/idle_enabled
-	    echo N > /sys/module/lpm_levels/system/perf/perf-l2-gdhs/idle_enabled
-	    echo N > /sys/module/lpm_levels/system/pwr/pwr-l2-gdhs/suspend_enabled
-            echo N > /sys/module/lpm_levels/system/perf/perf-l2-gdhs/suspend_enabled
             # Turn on sleep modes
             echo 0 > /sys/module/lpm_levels/parameters/sleep_disabled
 
@@ -5312,11 +5577,14 @@ case "$target" in
 		echo 85 85 > /proc/sys/kernel/sched_downmigrate
 		echo 100 > /proc/sys/kernel/sched_group_upmigrate
 		echo 10 > /proc/sys/kernel/sched_group_downmigrate
+		echo 1 > /proc/sys/kernel/sched_walt_rotate_big_tasks
 
 		echo 0-3 > /dev/cpuset/background/cpus
 		echo 0-3 > /dev/cpuset/system-background/cpus
 
 
+		# Turn off scheduler boost at the end
+		echo 0 > /proc/sys/kernel/sched_boost
 
 		# configure governor settings for silver cluster
 		echo "schedutil" > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor
@@ -5405,12 +5673,8 @@ case "$target" in
 				echo 0 > $npubw/bw_hwmon/idle_mbps
 		                echo 40 > $npubw/polling_interval
 				echo 0 > /sys/devices/virtual/npu/msm_npu/pwr
-	                      done
-	           done
-	fi
-	# Turn off scheduler boost at the end
-	echo 0 > /proc/sys/kernel/sched_boost
-	echo 1 > /proc/sys/kernel/sched_walt_rotate_big_tasks
+	    done
+	done
 
 	# memlat specific settings are moved to seperate file under
 	# device/target specific folder
@@ -5458,6 +5722,7 @@ case "$target" in
 			configure_automotive_sku_parameters
 		   fi
 		fi
+	fi
     ;;
 esac
 
@@ -5703,20 +5968,6 @@ case "$target" in
 	ddr_type4="07"
 	ddr_type5="08"
 
-    echo 128 > /sys/block/sda/queue/read_ahead_kb
-    echo 128 > /sys/block/sda/queue/nr_requests
-    echo 1 > /sys/block/sda/queue/iostats
-    echo 128 > /sys/block/dm-0/queue/read_ahead_kb
-    echo 128 > /sys/block/dm-1/queue/read_ahead_kb
-    echo 128 > /sys/block/dm-2/queue/read_ahead_kb
-    echo 128 > /sys/block/dm-3/queue/read_ahead_kb
-    echo 128 > /sys/block/dm-4/queue/read_ahead_kb
-    echo 128 > /sys/block/dm-5/queue/read_ahead_kb
-    echo 128 > /sys/block/dm-6/queue/read_ahead_kb
-    echo 128 > /sys/block/dm-7/queue/read_ahead_kb
-    echo 128 > /sys/block/dm-8/queue/read_ahead_kb
-    echo 128 > /sys/block/dm-9/queue/read_ahead_kb
-
 	# Core control parameters for gold
 	echo 2 > /sys/devices/system/cpu/cpu4/core_ctl/min_cpus
 	echo 60 > /sys/devices/system/cpu/cpu4/core_ctl/busy_up_thres
@@ -5752,66 +6003,72 @@ case "$target" in
 	echo 400000000 > /proc/sys/kernel/sched_coloc_downmigrate_ns
 
 	# cpuset parameters
-	echo 0-1 > /dev/cpuset/background/cpus
+	echo 0-3 > /dev/cpuset/background/cpus
 	echo 0-3 > /dev/cpuset/system-background/cpus
-    echo 0-3 > /dev/cpuset/restricted/cpus
-    echo 1-2 > /dev/cpuset/audio-app/cpus
-    
-    # uclamp tuning
-    echo 50 > /dev/cpuctl/background/cpu.uclamp.max
-    echo 50 > /dev/cpuctl/system-background/cpu.uclamp.max
-    echo 60 > /dev/cpuctl/dex2oat/cpu.uclamp.max
-    # Setup cpu.shares to throttle background groups (bg ~ 5% sysbg ~ 5% dex2oat ~2.5%)
-    echo 1024 > /dev/cpuctl/background/cpu.shares
-    echo 1024 > /dev/cpuctl/system-background/cpu.shares
-    echo 512 > /dev/cpuctl/dex2oat/cpu.shares
-    echo 20480 > /dev/cpuctl/system/cpu.shares
-    # We only have system and background groups holding tasks and the groups below are empty
-    echo 20480 > /dev/cpuctl/camera-daemon/cpu.shares
-    echo 20480 > /dev/cpuctl/foreground/cpu.shares
-    echo 20480 > /dev/cpuctl/nnapi-hal/cpu.shares
-    echo 20480 > /dev/cpuctl/rt/cpu.shares
-    echo 20480 > /dev/cpuctl/top-app/cpu.shares
 
 	# Turn off scheduler boost at the end
 	echo 0 > /proc/sys/kernel/sched_boost
 
 	# configure governor settings for silver cluster
 	echo "schedutil" > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor
-	echo 20000 > /sys/devices/system/cpu/cpufreq/policy0/schedutil/down_rate_limit_us
-	echo 500 > /sys/devices/system/cpu/cpufreq/policy0/schedutil/up_rate_limit_us
+	echo 0 > /sys/devices/system/cpu/cpufreq/policy0/schedutil/down_rate_limit_us
+	echo 0 > /sys/devices/system/cpu/cpufreq/policy0/schedutil/up_rate_limit_us
         if [ $rev == "2.0" ] || [ $rev == "2.1" ]; then
-		echo 1708800 > /sys/devices/system/cpu/cpufreq/policy0/schedutil/hispeed_freq
+		echo 1248000 > /sys/devices/system/cpu/cpufreq/policy0/schedutil/hispeed_freq
 	else
-		echo 1708800 > /sys/devices/system/cpu/cpufreq/policy0/schedutil/hispeed_freq
+		echo 1228800 > /sys/devices/system/cpu/cpufreq/policy0/schedutil/hispeed_freq
 	fi
-	echo 1248000 > /sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq
+	echo 576000 > /sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq
 	echo 1 > /sys/devices/system/cpu/cpufreq/policy0/schedutil/pl
 
 	# configure input boost settings
-	echo "0:1612800 4:1670400 7:1516800" > /sys/devices/system/cpu/cpu_boost/input_boost_freq
-	echo 120 > /sys/devices/system/cpu/cpu_boost/input_boost_ms
+	echo "0:1324800" > /sys/devices/system/cpu/cpu_boost/input_boost_freq
+	echo 40 > /sys/devices/system/cpu/cpu_boost/input_boost_ms
 
 	# configure governor settings for gold cluster
 	echo "schedutil" > /sys/devices/system/cpu/cpufreq/policy4/scaling_governor
-	echo 10000 > /sys/devices/system/cpu/cpufreq/policy4/schedutil/down_rate_limit_us
-	echo 500 > /sys/devices/system/cpu/cpufreq/policy4/schedutil/up_rate_limit_us
-    echo 1171200 > /sys/devices/system/cpu/cpu4/cpufreq/scaling_min_freq
-	echo 1766400 > /sys/devices/system/cpu/cpufreq/policy4/schedutil/hispeed_freq
+	echo 0 > /sys/devices/system/cpu/cpufreq/policy4/schedutil/down_rate_limit_us
+	echo 0 > /sys/devices/system/cpu/cpufreq/policy4/schedutil/up_rate_limit_us
+	echo 1574400 > /sys/devices/system/cpu/cpufreq/policy4/schedutil/hispeed_freq
 	echo 1 > /sys/devices/system/cpu/cpufreq/policy4/schedutil/pl
 
 	# configure governor settings for gold+ cluster
 	echo "schedutil" > /sys/devices/system/cpu/cpufreq/policy7/scaling_governor
-	echo 5000 > /sys/devices/system/cpu/cpufreq/policy7/schedutil/down_rate_limit_us
-	echo 500 > /sys/devices/system/cpu/cpufreq/policy7/schedutil/up_rate_limit_us
-    echo 1075200 > /sys/devices/system/cpu/cpu7/cpufreq/scaling_min_freq
-
+	echo 0 > /sys/devices/system/cpu/cpufreq/policy7/schedutil/down_rate_limit_us
+	echo 0 > /sys/devices/system/cpu/cpufreq/policy7/schedutil/up_rate_limit_us
         if [ $rev == "2.0" ] || [ $rev == "2.1" ]; then
 		echo 1632000 > /sys/devices/system/cpu/cpufreq/policy7/schedutil/hispeed_freq
 	else
 		echo 1612800 > /sys/devices/system/cpu/cpufreq/policy7/schedutil/hispeed_freq
 	fi
 	echo 1 > /sys/devices/system/cpu/cpufreq/policy7/schedutil/pl
+
+	#ifdef OPLUS_FEATURE_POWER_CPUFREQ
+	#window_policy:2=WINDOW_STATS_MAX_RECENT_AVG 3=WINDOW_STATS_AVG
+	echo 2 > /dev/stune/schedtune.window_policy
+	echo 3 > /dev/stune/background/schedtune.window_policy
+	echo 2 > /dev/stune/foreground/schedtune.window_policy
+	echo 2 > /dev/stune/top-app/schedtune.window_policy
+	echo 80 > /sys/devices/system/cpu/cpufreq/policy0/schedutil/target_loads
+	echo 0 > /sys/devices/system/cpu/cpufreq/policy0/schedutil/above_hispeed_delay
+	echo 80 > /sys/devices/system/cpu/cpufreq/policy4/schedutil/target_loads
+	echo 0 > /sys/devices/system/cpu/cpufreq/policy4/schedutil/above_hispeed_delay
+	echo "80 2841600:99" > /sys/devices/system/cpu/cpufreq/policy7/schedutil/target_loads
+	echo 0 > /sys/devices/system/cpu/cpufreq/policy7/schedutil/above_hispeed_delay
+	#endif
+
+	#ifdef OPLUS_FEATURE_POWER_EFFICIENCY
+	echo 1 > /dev/stune/background/schedtune.discount_wait_time
+	echo 1 > /dev/stune/background/schedtune.ed_task_filter
+	echo 1 > /dev/stune/background/schedtune.top_task_filter
+	#endif
+
+	echo 156 > /proc/sys/kernel/sched_min_task_util_for_colocation
+
+#ifdef CONFIG_OPLUS_FEATURE_TPP
+	chown -R system.system /sys/module/tpp/parameters/tpp_on
+	chown -R system.system /sys/module/tpp/parameters/strategy
+#endif /* CONFIG_OPLUS_FEATURE_TPP */
 
 	# Enable bus-dcvs
 	for device in /sys/devices/platform/soc
@@ -5895,6 +6152,8 @@ case "$target" in
         setprop vendor.dcvs.prop 0
 	setprop vendor.dcvs.prop 1
     echo N > /sys/module/lpm_levels/parameters/sleep_disabled
+    #/*Wangtao@BSP.kernel.MM change IO scheduler to noop */
+    echo noop > /sys/block/sda/queue/scheduler
     configure_memory_parameters
     ;;
 esac

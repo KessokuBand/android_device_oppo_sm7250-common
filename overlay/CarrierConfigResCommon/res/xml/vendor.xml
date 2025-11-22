@@ -45,7 +45,7 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.-->
 
     <carrier_config>
         <boolean name="apn_expand_bool" value="true" />
-        <boolean name="world_phone_bool" value="false" />
+        <boolean name="world_phone_bool" value="true" />
         <boolean name="allow_adding_apns_bool" value="true" />
         <boolean name="hide_preferred_network_type_bool" value="false" />
         <boolean name="show_cdma_choices_bool" value="false" />
@@ -1872,10 +1872,6 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.-->
         <boolean name="carrier_allow_transfer_ims_call_bool" value="false" />
     </carrier_config>
 
-    <carrier_config mcc="510" mnc="10">
-        <boolean name="carrier_volte_available_bool" value="true"/>
-    </carrier_config>
-
     <carrier_config mcc="310" mnc="00">
         <boolean name="rtt_supported_bool" value="true" />
         <boolean name="rtt_auto_upgrade_bool" value="true" />
@@ -2347,8 +2343,5 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.-->
         <item value="7,8,12" />
         <item value="3,11,9,10,15" />
         </string-array>
-        <int-array name="carrier_nr_availabilities_int_array" num="1">
-        <item value="2" />
-        </int-array>
     </carrier_config>
 </carrier_config_list>

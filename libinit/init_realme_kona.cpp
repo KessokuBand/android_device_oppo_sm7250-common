@@ -9,33 +9,33 @@
 #include "vendor_init.h"
 
 static const variant_info_t PENM00_CN_info = {
-    .prjversion_value = "20161",
+    .prjversion_value = "19101",
 
-    .device = "OP4EC1",
-    .model = "PENM00",
-    .name = "OPPO Reno6 Pro+ 5G",
+    .device = "OP4A9D",
+    .model = "PCRM00",
+    .name = "OPPO Reno3 Pro 5G",
 
-    .sku = "OP4EC1",
+    .sku = "OP4A9D",
 };
 
 static const variant_info_t PENM00_CNLZ_info = {
-    .prjversion_value = "20135",
+    .prjversion_value = "20137",
 
-    .device = "OP4EA7",
-    .model = "PDRM00",
-    .name = "OPPO Reno5 Pro+ 5G",
+    .device = "OP4E9F",
+    .model = "PEXM00",
+    .name = "OPPO K9 5G",
 
-    .sku = "OP4EC1",
+    .sku = "OP4E9F",
 };
 
 static const variant_info_t PENM00_GLOBAL_info = {
     .prjversion_value = "20351",
 
-    .device = "OP4F7FL1",
-    .model = "CPH2247",
-    .name = "OPPO Reno6 Pro 5G",
+    .device = "OP4AF7",
+    .model = "PDNM00",
+    .name = "OPPO Reno4 Pro 5G",
 
-    .sku = "OP4EC1",
+    .sku = "OP4AF7",
 };
 
 static const std::vector<variant_info_t> variants = {

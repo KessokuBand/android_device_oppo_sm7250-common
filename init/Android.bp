@@ -1,7 +1,9 @@
 //
-// Copyright (C) 2022 The LineageOS Project
+// Copyright (C) 2025 The LineageOS Project
+//
 // SPDX-License-Identifier: Apache-2.0
 //
+
 
 prebuilt_etc {
     name: "fstab.qcom",
@@ -11,37 +13,9 @@ prebuilt_etc {
 }
 
 prebuilt_etc {
-    name: "init.qcom.power.rc",
-    src: "init.qcom.power.rc",
-    sub_dir: "init/hw",
-    vendor: true,
-}
-
-prebuilt_etc {
     name: "init.qcom.rc",
     src: "init.qcom.rc",
     sub_dir: "init/hw",
-    vendor: true,
-}
-
-prebuilt_etc {
-    name: "init.oplus.rc",
-    src: "init.oplus.rc",
-    sub_dir: "init",
-    device_specific: true,
-}
-
-prebuilt_etc {
-    name: "init.qcom.recovery.rc",
-    src: "init.qcom.recovery.rc",
-    sub_dir: "init",
-    recovery: true,
-}
-
-prebuilt_etc {
-    name: "init.oplus.touch.rc",
-    src: "init.oplus.touch.rc",
-    sub_dir: "init",
     vendor: true,
 }
 
@@ -53,10 +27,10 @@ prebuilt_etc {
 }
 
 prebuilt_etc {
-    name: "ueventd.oplus.rc",
-    filename: "ueventd.rc",
-    src: "ueventd.oplus.rc",
-    device_specific: true,
+    name: "init.recovery.qcom.rc",
+    src: "init.recovery.qcom.rc",
+    sub_dir: "init",
+    recovery: true,
 }
 
 prebuilt_etc {
@@ -73,9 +47,9 @@ sh_binary {
 }
 
 sh_binary {
-    name: "init.oplus.sh",
-    src: "init.oplus.sh",
-    device_specific: true,
+    name: "init.qcom.class_core.sh",
+    src: "init.qcom.class_core.sh",
+    vendor: true,
 }
 
 sh_binary {
