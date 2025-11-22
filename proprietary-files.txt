@@ -99,9 +99,7 @@ vendor/lib64/libaudioconfigstore.so
 vendor/lib64/libqtigef.so
 vendor/lib64/libtinycompress.so
 vendor/lib64/vendor.qti.hardware.audiohalext@1.0.so
-vendor/lib/hw/audio.primary.lito.so
 vendor/lib/hw/vendor.qti.hardware.audiohalext@1.0-impl.so
-vendor/lib/liba2dpoffload.so
 vendor/lib/libadiertac.so
 vendor/lib/libaudcal.so
 vendor/lib/libaudio_log_utils.so
@@ -789,9 +787,6 @@ vendor/lib/libhdr_tm.so
 
 #Graphics(HWC)
 vendor/bin/hw/vendor.qti.hardware.display.composer-service
-vendor/lib64/libhistogram.so
-vendor/lib64/libsdmcore.so
-vendor/lib64/libsdmutils.so
 
 #Graphics(PixelWork)
 vendor/lib64/libpwirisfeature.so
@@ -802,7 +797,6 @@ vendor/lib64/vendor.pixelworks.hardware.display@1.1.so
 #Graphics(SDM)
 vendor/lib64/libdisplayskuutils.so
 vendor/lib64/libqseed3.so
-vendor/lib64/libsdedrm.so
 vendor/lib64/libsdm-color.so
 vendor/lib64/libsdm-colormgr-algo.so
 vendor/lib64/libsdm-diag.so
@@ -1468,4 +1462,3 @@ vendor/lib/libwfdutils_proprietary.so
 vendor/lib/vendor.qti.hardware.wifidisplaysession@1.0.so
 vendor/lib/vendor.qti.hardware.wifidisplaysessionl@1.0-halimpl.so
 vendor/lib/libdisplayconfig.qti.so
-vendor/lib64/libdisplayconfig.qti.so
