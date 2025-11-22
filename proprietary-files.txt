@@ -785,9 +785,6 @@ vendor/lib/libsdedrm.so
 vendor/lib64/libhdr_tm.so
 vendor/lib/libhdr_tm.so
 
-#Graphics(HWC)
-vendor/bin/hw/vendor.qti.hardware.display.composer-service
-
 #Graphics(PixelWork)
 vendor/lib64/libpwirisfeature.so
 vendor/lib64/libpwirishalwrapper.so
