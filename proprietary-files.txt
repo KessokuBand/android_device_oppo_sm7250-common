@@ -297,6 +297,9 @@ vendor/lib64/vendor.display.color@1.4.so
 vendor/lib64/vendor.display.color@1.5.so
 vendor/lib64/vendor.display.postproc@1.0.so
 
+# DRM - from mata OPM1.170911.254
+vendor/lib64/libspl.so|0cf185c22519bbae1e1232928fda151f538f9977
+
 #DPM
 system_ext/bin/dpmd
 system_ext/etc/dpm/dpm.conf
@@ -315,6 +318,12 @@ system_ext/lib64/libdpmtcm.so
 system_ext/lib64/vendor.qti.diaghal@1.0.so
 vendor/bin/dpmQmiMgr
 vendor/etc/init/dpmQmiMgr.rc
+vendor/lib64/libqisl.so
+vendor/lib64/librpmb.so
+vendor/lib64/libsecureui.so
+vendor/lib64/libsecureui_svcsock.so
+vendor/lib64/libssd.so
+vendor/lib64/vendor.qti.hardware.qseecom@1.0.so
 vendor/lib64/com.qualcomm.qti.dpm.api@1.0.so
 vendor/lib64/libdpmqmihal.so
 
