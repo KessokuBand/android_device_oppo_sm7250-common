@@ -13,6 +13,10 @@ $(call inherit-product, vendor/oppo/sm7250-common/sm7250-common-vendor.mk)
 # APEX
 PRODUCT_COMPRESSED_APEX := false
 
+# Shims
+PRODUCT_PACKAGES += \
+    libshims_ocsclk
+
 # API levels
 PRODUCT_SHIPPING_API_LEVEL := 30
 
