@@ -253,6 +253,19 @@ PRODUCT_PACKAGES += \
 # Overlays
 $(call inherit-product, hardware/oplus/overlay/qssi/qssi.mk)
 
+PRODUCT_ENFORCE_RRO_TARGETS := *
+
+PRODUCT_PACKAGES += \
+    CarrierConfigResCommon \
+    FrameworksResTarget \
+    OPlusFrameworksResCommon \
+    OPlusFrameworksResTarget \
+    OPlusSettingsProviderResTarget \
+    OPlusSettingsResCommon \
+    OPlusSystemUIResCommon \
+    OPlusSystemUIResTarget \
+    WifiResTarget
+
 # OMX
 PRODUCT_PACKAGES += \
     init.qti.media.sh \
