@@ -250,6 +250,9 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     android.hardware.neuralnetworks@1.3.vendor
 
+# Overlays
+$(call inherit-product, hardware/oplus/overlay/qssi/qssi.mk)
+
 # OMX
 PRODUCT_PACKAGES += \
     init.qti.media.sh \
@@ -292,7 +295,8 @@ PRODUCT_PACKAGES += \
     android.hardware.radio.deprecated@1.0.vendor \
     android.hardware.secure_element@1.2.vendor \
     libprotobuf-cpp-full \
-    librmnetctl
+    librmnetctl \
+    libshims_ocsclk
 
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/configs/qti_whitelist.xml:$(TARGET_COPY_OUT_SYSTEM)/etc/sysconfig/qti_whitelist.xml \
